@@ -1,0 +1,26 @@
+name: One-time import of site files
+on:
+  push:
+    paths: ['.github/workflows/import.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the site bundle and verify its checksum
+        run: |
+          curl -fsSL -o bundle.json.gz https://litter.catbox.moe/89o2yc.gz
+          gunzip bundle.json.gz
+          echo "e783508daba7ce419e8241887e5c0c8692a67c269824ade1f651d8a870103761  bundle.json" | sha256sum -c -
+          python3 -c "import json,base64; b=json.load(open('bundle.json')); [open(k,'wb').write(base64.b64decode(v)) for k,v in b.items()]"
+          rm bundle.json
+      - name: Commit the site files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- . ':!.github'
+          git commit -m "Add QuizVideo v0.1 site files"
+          git push
