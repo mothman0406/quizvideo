@@ -892,6 +892,7 @@ async function onExportVideo() {
   const started = performance.now();
   try {
     const res = await exportVideo(state, look, p => { bar.value = p; }, exporting.signal);
+    try { navigator.sendBeacon('/api/hit?k=video'); } catch (e) {}
     const secs = ((performance.now() - started) / 1000).toFixed(1);
     const name = `quizvideo-${state.format}-${Date.now().toString(36)}.${res.ext}`;
     const outcome = await saveBlob(res.blob, name);
@@ -906,6 +907,7 @@ async function onExportSlides() {
   const bar = $('#progress'); bar.hidden = false; bar.value = 0; setStatus('Rendering slides...');
   try {
     const res = await exportSlides(state, look, p => { bar.value = p; });
+    try { navigator.sendBeacon('/api/hit?k=slides'); } catch (e) {}
     const files = res.pngs.map((b, i) => new File([b], `slide-${String(i + 1).padStart(2, '0')}.png`, { type: 'image/png' }));
     if (navigator.canShare && navigator.canShare({ files }) && matchMedia('(pointer: coarse)').matches) {
       try { await navigator.share({ files, title: 'Quiz slides' }); setStatus(`Shared ${res.count} slides.`, 'ok'); return; } catch (e) { /* fall through to zip */ }
