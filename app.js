@@ -156,11 +156,27 @@ Which country has the most people? | India | China | United States | Indonesia`;
 function parseWyr(text) {
   return text.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
     const p = l.split('|').map(s => s.trim());
-    const it = { kind: 'wyr', a: p[0] || '', b: p[1] || '' };
+    const it = { kind: 'wyr', a: p[0] || '', b: p[1] || '', key: (p[0] || '') + '|' + (p[1] || '') };
     const pa = parseFloat(p[2]), pb = parseFloat(p[3]);
-    if (isFinite(pa) && isFinite(pb) && pa + pb > 0) { it.pa = Math.round(100 * pa / (pa + pb)); it.pb = 100 - it.pa; }
+    if (isFinite(pa) && isFinite(pb) && pa + pb > 0) { it.pa = Math.round(100 * pa / (pa + pb)); it.pb = 100 - it.pa; it.textPa = it.pa; }
     return it;
   }).filter(it => it.a && it.b).slice(0, 20);
+}
+function autoSplit(key) {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const pa = 26 + ((h >>> 0) % 47);
+  return pa >= 48 && pa <= 52 ? pa + 6 : pa;
+}
+function applyWyrSplits(items) {
+  const splits = state.wyrSplit || {};
+  items.forEach(it => {
+    const c = splits[it.key];
+    if (c === 'hide') { delete it.pa; delete it.pb; }
+    else if (typeof c === 'number') { it.pa = c; it.pb = 100 - c; }
+    else if (it.pa == null) { it.pa = autoSplit(it.key); it.pb = 100 - it.pa; }
+  });
+  return items;
 }
 function parseTrivia(text, seed) {
   const rnd = rng(seed);
@@ -537,7 +553,7 @@ function drawWyr(ctx, look, st, s, t) {
   ctx.fillStyle = look.accentInk; ctx.font = font(look, 'display', 70); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('OR', 0, 5);
   ctx.restore();
   drawTitle(ctx, look, titleFor(st), 230, 92, appear);
-  const askComment = revealP > 0 && it.pa == null;
+  const askComment = revealP > 0;
   ctx.save(); ctx.globalAlpha = ease.outCubic(appear);
   if (askComment) pill(ctx, look, 'COMMENT YOUR PICK', W / 2, 318, { size: 32, fill: look.accent, ink: look.accentInk });
   else pill(ctx, look, `${s.i + 1} / ${st.items.length}`, W / 2, 316, { size: 30 });
@@ -788,7 +804,7 @@ async function loadFonts() {
 const state = {
   format: 'country', count: 10, difficulty: 'ramp', region: 'World', mode: 'reveal',
   seconds: 5, reveal: 2, title: '', themeId: 'midnight', lookSeed: newSeed(), seed: newSeed(),
-  sound: true, watermark: true, wyrText: SAMPLE_WYR, triviaText: SAMPLE_TRIVIA, items: [],
+  sound: true, watermark: true, wyrSplit: {}, wyrText: SAMPLE_WYR, triviaText: SAMPLE_TRIVIA, items: [],
 };
 let look = makeLook(state.themeId, state.lookSeed);
 let timeline = buildTimeline(state);
@@ -796,7 +812,7 @@ const player = { playing: false, t: 1.6, last: 0, raf: 0, audio: null, audioCtx:
 
 function regenerate(keepSeed) {
   if (!keepSeed) state.seed = newSeed();
-  if (state.format === 'wyr') state.items = parseWyr(state.wyrText);
+  if (state.format === 'wyr') state.items = applyWyrSplits(parseWyr(state.wyrText));
   else if (state.format === 'trivia') state.items = parseTrivia(state.triviaText, state.seed);
   else state.items = genGeo(state.format, { seed: state.seed, count: state.count, difficulty: state.difficulty, region: state.region, mode: state.mode });
   if (state.format === 'trivia' && state.items.some(it => !it.options)) state.items = state.items.map(it => it.options ? it : it);
@@ -853,6 +869,34 @@ function updateMeta() {
   const el = $('#meta');
   if (el) el.textContent = `${state.items.length} questions, ${Math.round(d)} seconds${d >= 60 ? ' (long enough for TikTok Creator Rewards)' : ''}`;
 }
+const SPLITS = [50, 55, 60, 65, 70, 75, 80, 85, 90, 45, 40, 35, 30, 25, 20, 15, 10];
+function renderWyrList() {
+  const box = $('#wyr-controls'); if (!box) return;
+  let list = $('#wyr-items');
+  if (!list) {
+    const lab = box.querySelector('label[for="wyr-text"]');
+    if (lab) lab.textContent = 'One per line, as option A | option B. After the timer, each side shows a percentage. Pick a split for any question below, or hide it.';
+    list = document.createElement('ol'); list.id = 'wyr-items'; list.className = 'items wyr-items'; box.appendChild(list);
+  }
+  list.textContent = '';
+  if (state.format !== 'wyr') return;
+  state.items.forEach(it => {
+    const li = document.createElement('li');
+    const name = document.createElement('span'); name.className = 'it-name'; name.textContent = it.a + ' or ' + it.b; name.title = name.textContent;
+    const sel = document.createElement('select'); sel.className = 'split'; sel.setAttribute('aria-label', 'Percentages for: ' + name.textContent);
+    const sugg = it.textPa != null ? it.textPa : autoSplit(it.key);
+    const opts = [['auto', 'Suggested ' + sugg + '/' + (100 - sugg)]].concat(SPLITS.map(v => [String(v), v + '/' + (100 - v)]), [['hide', 'Hide percentages']]);
+    opts.forEach(o => { const op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; sel.appendChild(op); });
+    const cur = state.wyrSplit[it.key];
+    sel.value = cur === undefined ? 'auto' : String(cur);
+    sel.addEventListener('change', () => {
+      if (sel.value === 'auto') delete state.wyrSplit[it.key];
+      else state.wyrSplit[it.key] = sel.value === 'hide' ? 'hide' : +sel.value;
+      regenerate(true);
+    });
+    li.append(name, sel); list.appendChild(li);
+  });
+}
 function renderItemList() {
   const list = $('#items'); if (!list) return;
   list.textContent = '';
@@ -860,6 +904,7 @@ function renderItemList() {
   $('#geo-controls').hidden = !geo;
   $('#wyr-controls').hidden = state.format !== 'wyr';
   $('#trivia-controls').hidden = state.format !== 'trivia';
+  renderWyrList();
   if (!geo) return;
   state.items.forEach((it, i) => {
     const li = document.createElement('li');
