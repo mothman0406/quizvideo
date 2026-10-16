@@ -315,6 +315,7 @@ function drawTierBadge(ctx, look, tier, cx, cy, appear) {
   ctx.restore();
 }
 function drawTimer(ctx, look, style, frac, secsLeft, cx, cy) {
+  if (secsLeft > 60) return; // carousel slides: no timer
   const urgent = secsLeft <= 3 && frac > 0;
   const col = urgent ? '#EF4444' : look.accent;
   ctx.save();
@@ -791,7 +792,7 @@ const state = {
 };
 let look = makeLook(state.themeId, state.lookSeed);
 let timeline = buildTimeline(state);
-const player = { playing: false, t: 0, last: 0, raf: 0, audio: null, audioCtx: null, audioSrc: null, audioDirty: true };
+const player = { playing: false, t: 1.6, last: 0, raf: 0, audio: null, audioCtx: null, audioSrc: null, audioDirty: true };
 
 function regenerate(keepSeed) {
   if (!keepSeed) state.seed = newSeed();
@@ -927,7 +928,7 @@ function bindUI() {
     state.format = b.dataset.format; state.title = ''; $('#title').value = '';
     $$('[data-format]').forEach(x => x.setAttribute('aria-checked', x === b ? 'true' : 'false'));
     $('#title').placeholder = FORMATS[state.format].title;
-    player.t = 0; regenerate();
+    player.t = 1.6; regenerate();
   }));
   $('#count').addEventListener('change', e => { state.count = +e.target.value; regenerate(); });
   $('#difficulty').addEventListener('change', e => { state.difficulty = e.target.value; regenerate(); });
