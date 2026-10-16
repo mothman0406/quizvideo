@@ -974,11 +974,75 @@ function applyPreset() {
   $('#mode').value = state.mode; $('#difficulty').value = state.difficulty; $('#region').value = state.region;
   $('#title').placeholder = FORMATS[state.format].title;
 }
+/* ------------------------------------------------------------------ Pro (license keys checked with Polar) */
+const CHECKOUT_URL = 'https://buy.polar.sh/polar_cl_yu9iZnBG5k6kThYf0rdj0xjXujoTaq2DApM3X0rv9dl';
+const POLAR_ORG = '042c4856-6ce6-47f7-8480-26cb886ec391';
+const LIC_KEY = 'qv-license';
+function readLicense() { try { const v = JSON.parse(localStorage.getItem(LIC_KEY) || 'null'); return v && typeof v.key === 'string' ? v : null; } catch (e) { return null; } }
+function writeLicense(v) { try { if (v) localStorage.setItem(LIC_KEY, JSON.stringify(v)); else localStorage.removeItem(LIC_KEY); } catch (e) {} }
+async function validateLicense(key) {
+  const r = await fetch('https://api.polar.sh/v1/customer-portal/license-keys/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, organization_id: POLAR_ORG }) });
+  if (r.status === 404 || r.status === 422) return { ok: false, reason: 'That key was not found. Check it against your receipt email.' };
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
+  const ok = d.status === 'granted' && (!d.expires_at || new Date(d.expires_at) > new Date());
+  return { ok, reason: ok ? '' : 'This key is no longer active. If your subscription ended, you can renew from your receipt email.' };
+}
+function setPro(on) { state.pro = !!on; state.watermark = !state.pro; renderPro(); drawPreview(); }
+function renderPro() {
+  const box = document.querySelector('.group.pro'); if (!box) return;
+  const lic = readLicense();
+  box.textContent = '';
+  const h = document.createElement('h2'); h.textContent = 'Pro';
+  if (state.pro) {
+    const s = document.createElement('span'); s.className = 'soon'; s.textContent = 'active'; h.appendChild(s); box.appendChild(h);
+    const lab = document.createElement('label'); lab.className = 'check';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'wm'; cb.checked = state.watermark;
+    cb.addEventListener('change', () => { state.watermark = cb.checked; drawPreview(); });
+    lab.append(cb, document.createTextNode(' Show the quizvideo.app mark')); box.appendChild(lab);
+    const p = document.createElement('p'); p.className = 'fine'; p.textContent = 'License ending in ' + (lic ? lic.key.slice(-4) : '????') + '. ';
+    const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'mini'; rm.textContent = 'Remove from this device';
+    rm.addEventListener('click', () => { writeLicense(null); setPro(false); });
+    p.appendChild(rm); box.appendChild(p);
+    return;
+  }
+  box.appendChild(h);
+  const p1 = document.createElement('p'); p1.textContent = 'Remove the made with quizvideo.app mark from every video and slide. Batch mode and a brand kit are coming soon, and Pro includes them when they ship.'; box.appendChild(p1);
+  const p2 = document.createElement('p'); p2.className = 'price'; p2.textContent = '$9 a month, $59 a year, or $49 once (launch deal for the first 100 buyers).'; box.appendChild(p2);
+  const a = document.createElement('a'); a.className = 'btn primary'; a.href = CHECKOUT_URL; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Get Pro'; box.appendChild(a);
+  const det = document.createElement('details'); det.className = 'lic';
+  const sum = document.createElement('summary'); sum.textContent = 'I have a license key'; det.appendChild(sum);
+  const row = document.createElement('div'); row.className = 'lic-row';
+  const inp = document.createElement('input'); inp.type = 'text'; inp.id = 'lic-key'; inp.placeholder = 'QV-...'; inp.autocomplete = 'off'; inp.spellcheck = false; inp.setAttribute('aria-label', 'License key');
+  const go = document.createElement('button'); go.type = 'button'; go.className = 'btn'; go.textContent = 'Unlock';
+  const st = document.createElement('p'); st.className = 'lic-status'; st.setAttribute('role', 'status');
+  go.addEventListener('click', async () => {
+    const key = inp.value.trim(); if (!key) { st.textContent = 'Paste your license key first.'; return; }
+    go.disabled = true; st.textContent = 'Checking your key...';
+    try { const res = await validateLicense(key); if (res.ok) { writeLicense({ key, ok: true, at: Date.now() }); setPro(true); } else { st.textContent = res.reason; } }
+    catch (e) { st.textContent = 'Could not reach the license server. Check your connection and try again.'; }
+    finally { go.disabled = false; }
+  });
+  row.append(inp, go); det.append(row, st); box.appendChild(det);
+  const fine = document.createElement('p'); fine.className = 'fine'; fine.textContent = '14-day refunds, no questions asked. Payments are handled by Polar.'; box.appendChild(fine);
+  if (new URLSearchParams(location.search).get('pro') === 'thanks') { det.open = true; st.textContent = 'Thanks for buying Pro! Your license key is in your receipt email. Paste it here to unlock.'; setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400); }
+}
+async function initPro() {
+  const lic = readLicense();
+  if (lic && lic.ok && Date.now() - (lic.at || 0) < 14 * 864e5) { state.pro = true; state.watermark = false; }
+  renderPro();
+  if (lic) {
+    try { const res = await validateLicense(lic.key); if (res.ok) { writeLicense({ key: lic.key, ok: true, at: Date.now() }); if (!state.pro) setPro(true); } else { writeLicense(null); if (state.pro) setPro(false); } }
+    catch (e) { /* offline: keep the cached result until it is 14 days old */ }
+  }
+}
+
 async function main() {
   try {
     await Promise.all([loadData(), loadFonts()]);
     bindUI();
     applyPreset();
+    initPro();
     regenerate(true);
     setStatus('Ready. Everything renders on this device; nothing is uploaded.');
   } catch (e) {
