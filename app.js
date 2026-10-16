@@ -962,10 +962,23 @@ function bindUI() {
   document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); player.playing ? pause() : play(); } });
 }
 
+function applyPreset() {
+  const q = new URLSearchParams(location.search);
+  const p = Object.assign({}, window.QV_PRESET || {});
+  ['format', 'mode', 'difficulty', 'region'].forEach(k => { if (q.get(k)) p[k] = q.get(k); });
+  if (p.format && FORMATS[p.format]) state.format = p.format;
+  if (p.mode === 'choice' || p.mode === 'reveal') state.mode = p.mode;
+  if (p.difficulty === 'ramp' || TIERS.includes(p.difficulty)) state.difficulty = p.difficulty;
+  if (REGIONS.includes(p.region)) state.region = p.region;
+  $$('[data-format]').forEach(x => x.setAttribute('aria-checked', x.dataset.format === state.format ? 'true' : 'false'));
+  $('#mode').value = state.mode; $('#difficulty').value = state.difficulty; $('#region').value = state.region;
+  $('#title').placeholder = FORMATS[state.format].title;
+}
 async function main() {
   try {
     await Promise.all([loadData(), loadFonts()]);
     bindUI();
+    applyPreset();
     regenerate(true);
     setStatus('Ready. Everything renders on this device; nothing is uploaded.');
   } catch (e) {

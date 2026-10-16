@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quiz Carousel Maker for TikTok Photo Mode | QuizVideo</title>
+<meta name="description" content="Turn a quiz into carousel slides: a cover, one slide per question, an answers slide and an ending. 1080x1920 PNGs for TikTok photo mode. Free.">
+<meta name="theme-color" content="#0C1130">
+<link rel="canonical" href="https://quizvideo.app/quiz-carousel-maker">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="QuizVideo">
+<meta property="og:title" content="Quiz Carousel Maker for TikTok Photo Mode | QuizVideo">
+<meta property="og:description" content="Turn a quiz into carousel slides: a cover, one slide per question, an answers slide and an ending. 1080x1920 PNGs for TikTok photo mode. Free.">
+<meta property="og:url" content="https://quizvideo.app/quiz-carousel-maker">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!--QV:FONTS--><link rel="stylesheet" href="/fonts.css"><!--/QV:FONTS-->
+<!--QV:CSS--><link rel="stylesheet" href="/app.css"><!--/QV:CSS-->
+<!--QV:IMPORTMAP--><script type="importmap">{"imports":{"mediabunny":"/mediabunny.min.mjs","@mediabunny/aac-encoder":"/mediabunny-aac-encoder.min.mjs","fflate":"/fflate.mjs"}}</script><!--/QV:IMPORTMAP-->
+<!--QV:APP--><script type="module" src="/app.js"></script><!--/QV:APP-->
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="/"><span class="mark" aria-hidden="true">?</span>QuizVideo</a>
+  <div class="intro"><h1 class="h1">Quiz carousel maker</h1><p class="tag">Free, no signup, and it runs in your browser.</p></div>
+</header>
+
+<main class="studio">
+  <section class="stage" aria-label="Preview and export">
+    <div class="phone"><canvas id="preview" width="540" height="960" aria-label="Video preview"></canvas></div>
+    <div class="transport">
+      <button id="play" type="button" class="btn" aria-pressed="false">Play</button>
+      <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek through the video">
+      <span id="time" class="time">0:00 / 0:00</span>
+    </div>
+    <p id="meta" class="meta"></p>
+    <div class="exports">
+      <button id="export-video" type="button" class="btn primary">Download video</button>
+      <button id="export-slides" type="button" class="btn">Download slides</button>
+    </div>
+    <progress id="progress" max="1" value="0" hidden></progress>
+    <p id="status" class="status" role="status" aria-live="polite">Loading...</p>
+  </section>
+
+  <section class="controls" aria-label="Settings">
+    <div class="group">
+      <h2>Format</h2>
+      <div class="formats" role="radiogroup" aria-label="Format">
+        <button type="button" role="radio" data-format="country" aria-checked="true">Guess the Country</button>
+        <button type="button" role="radio" data-format="flag" aria-checked="false">Guess the Flag</button>
+        <button type="button" role="radio" data-format="capital" aria-checked="false">Guess the Capital</button>
+        <button type="button" role="radio" data-format="wyr" aria-checked="false">Would You Rather</button>
+        <button type="button" role="radio" data-format="trivia" aria-checked="false">Trivia</button>
+      </div>
+    </div>
+
+    <div class="group" id="geo-controls">
+      <h2>Questions</h2>
+      <div class="row">
+        <label>How many
+          <select id="count">
+            <option>5</option><option>6</option><option>7</option><option>8</option><option>9</option>
+            <option selected>10</option><option>12</option><option>15</option>
+          </select>
+        </label>
+        <label>Difficulty
+          <select id="difficulty">
+            <option value="ramp" selected>Easy to extreme</option>
+            <option value="easy">Easy</option><option value="medium">Medium</option>
+            <option value="hard">Hard</option><option value="extreme">Extreme</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Region
+          <select id="region">
+            <option>World</option><option>Europe</option><option>Asia</option><option>Africa</option>
+            <option>North America</option><option>South America</option><option>Oceania</option>
+          </select>
+        </label>
+        <label>Answers
+          <select id="mode">
+            <option value="reveal" selected>Reveal after the timer</option>
+            <option value="choice">Multiple choice</option>
+          </select>
+        </label>
+      </div>
+      <button id="new-set" type="button" class="btn">New set</button>
+      <ol id="items" class="items"></ol>
+    </div>
+
+    <div class="group" id="wyr-controls" hidden>
+      <h2>Questions</h2>
+      <label for="wyr-text">One per line, as option A | option B. Only add percentages (| 62 | 38) if you have real poll results.</label>
+      <textarea id="wyr-text" rows="9" spellcheck="true"></textarea>
+    </div>
+
+    <div class="group" id="trivia-controls" hidden>
+      <h2>Questions</h2>
+      <label for="trivia-text">One per line, as question | right answer | wrong | wrong | wrong. For true or false, write statement | True.</label>
+      <textarea id="trivia-text" rows="9" spellcheck="true"></textarea>
+    </div>
+
+    <div class="group">
+      <h2>Style</h2>
+      <div class="themes" id="themes" role="radiogroup" aria-label="Theme"></div>
+      <button id="shuffle-style" type="button" class="btn">Shuffle style</button>
+      <label class="range">Seconds per question
+        <span class="range-row"><input id="seconds" type="range" min="3" max="10" value="5"><output id="seconds-out" for="seconds">5s</output></span>
+      </label>
+      <label>Title on screen
+        <input id="title" type="text" maxlength="40" placeholder="GUESS THE COUNTRY" autocomplete="off">
+      </label>
+      <label class="check"><input id="sound" type="checkbox" checked> Sound effects</label>
+    </div>
+
+    <div class="group pro">
+      <h2>Pro <span class="soon">coming soon</span></h2>
+      <p>Remove the watermark, make a week of videos at once from a spreadsheet, and use your own colors and handle.</p>
+    </div>
+  </section>
+</main>
+<section class="info">
+<h2>From quiz to carousel</h2>
+<p>Download slides turns any quiz into a carousel: a cover, one slide per question, an answers slide, and a closing slide that asks for scores.</p>
+<h2>Sizes</h2>
+<p>Slides are 1080x1920 PNG images, the size TikTok photo mode uses, and photo mode takes 4 to 35 images. On a phone you can share the slides straight to your photos.</p>
+<h2>Questions people ask</h2>
+<details><summary>How many slides do I get?</summary><p>One per question plus three: the cover, the answers, and the ending. A 10-question quiz gives 13 slides.</p></details>
+<details><summary>Do slides show the timer?</summary><p>No. Slides show the question and ask viewers to swipe for the answers.</p></details>
+<h2>Pick a format</h2>
+<ul class="links"><li><a href="/guess-the-country-video-maker">Guess the Country</a></li><li><a href="/guess-the-flag-video-maker">Guess the Flag</a></li><li><a href="/guess-the-capital-video-maker">Guess the Capital</a></li><li><a href="/would-you-rather-video-maker">Would You Rather</a></li><li><a href="/trivia-quiz-video-maker">Trivia</a></li><li><a href="/quiz-carousel-maker">Quiz carousels</a></li><li><a href="/tiktok-quiz-maker">TikTok quiz maker</a></li><li><a href="/youtube-shorts-quiz-maker">YouTube Shorts quizzes</a></li><li><a href="/faceless-quiz-video-maker">Faceless quiz videos</a></li><li><a href="/how-to-make-quiz-videos-for-tiktok">How to make quiz videos for TikTok</a></li></ul>
+</section>
+
+<footer class="site-foot">
+  <nav aria-label="Formats"><a href="/guess-the-country-video-maker">Guess the Country</a><a href="/guess-the-flag-video-maker">Guess the Flag</a><a href="/guess-the-capital-video-maker">Guess the Capital</a><a href="/would-you-rather-video-maker">Would You Rather</a><a href="/trivia-quiz-video-maker">Trivia</a><a href="/quiz-carousel-maker">Quiz carousels</a><a href="/tiktok-quiz-maker">TikTok quiz maker</a><a href="/youtube-shorts-quiz-maker">YouTube Shorts quizzes</a><a href="/faceless-quiz-video-maker">Faceless quiz videos</a><a href="/how-to-make-quiz-videos-for-tiktok">How to make quiz videos for TikTok</a></nav>
+  <nav aria-label="Legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/refunds">Refunds</a><a href="mailto:support@quizvideo.app">support@quizvideo.app</a></nav>
+  <p>Flags from flag-icons (MIT). Map shapes from Natural Earth (public domain). Capitals checked against Wikidata and Natural Earth, and current as of 2026.</p>
+</footer>
+</body>
+</html>
