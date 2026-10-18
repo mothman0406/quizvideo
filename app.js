@@ -2,7 +2,9 @@
    Nothing is uploaded: rendering, encoding, and packaging all happen on this device. */
 
 const W = 1080, H = 1920, FPS = 30;
-const INLINE = window.QV_INLINE || null;          // set by the single-file preview build
+const INLINE = window.QV_INLINE || null;
+// Polar adds a one-time customer session token to the post-checkout URL. Read it, then strip it from the address bar before analytics loads.
+const QV_SESSION = (() => { try { const u = new URL(location.href); const t = u.searchParams.get('customer_session_token'); if (t) { u.searchParams.delete('customer_session_token'); u.searchParams.delete('checkout_id'); history.replaceState(null, '', u.pathname + u.search + u.hash); } return t; } catch (e) { return null; } })();          // set by the single-file preview build
 const VERSION = '0.1.0';
 
 /* ------------------------------------------------------------------ utils */
@@ -439,6 +441,23 @@ function drawWatermark(ctx, look) {
   ctx.restore();
 }
 
+function loadBrand() { try { const v = JSON.parse(localStorage.getItem('qv-brand') || 'null'); return v && typeof v === 'object' ? { handle: String(v.handle || '').slice(0, 32), color: /^#[0-9a-f]{6}$/i.test(v.color || '') ? v.color : '' } : { handle: '', color: '' }; } catch (e) { return { handle: '', color: '' }; } }
+function saveBrand() { try { localStorage.setItem('qv-brand', JSON.stringify(state.brand)); } catch (e) {} }
+function applyBrand(look, st) {
+  const c = st && st.pro && st.brand && st.brand.color;
+  if (!c || !/^#[0-9a-f]{6}$/i.test(c) || look.__brand === c) return look;
+  const n = parseInt(c.slice(1), 16), lum = (0.2126 * (n >> 16 & 255) + 0.7152 * (n >> 8 & 255) + 0.0722 * (n & 255)) / 255;
+  return Object.assign({}, look, { accent: c, accentInk: lum > 0.55 ? '#141414' : '#FFFFFF', __brand: c });
+}
+function drawMarks(ctx, look, st) {
+  const handle = st.pro && st.brand && st.brand.handle ? st.brand.handle : '';
+  if (!handle && !st.watermark) return;
+  const text = handle && st.watermark ? handle + '  \u00b7  made with quizvideo.app' : (handle || 'made with quizvideo.app');
+  ctx.save(); ctx.globalAlpha = handle ? 0.95 : 0.85;
+  pill(ctx, look, text, W / 2, 1488, { size: handle ? 30 : 26 });
+  ctx.restore();
+}
+
 /* ------------------------------------------------------------------ timeline */
 const INTRO = 2.6, OUTRO = 3.6, TRANS = 0.36;
 function buildTimeline(st) {
@@ -612,6 +631,7 @@ function drawTransition(ctx, look, tl, t) {
   }
 }
 function renderFrame(ctx, tl, t, st, look, opts = {}) {
+  look = applyBrand(look, st);
   ctx.save();
   ctx.clearRect(0, 0, W, H);
   drawBackground(ctx, look, t);
@@ -621,7 +641,7 @@ function renderFrame(ctx, tl, t, st, look, opts = {}) {
   else if (seg.type === 'q') drawQuestion(ctx, look, st, seg, t);
   else drawOutro(ctx, look, st, seg, t);
   if (!opts.noTransitions) drawTransition(ctx, look, tl, t);
-  if (st.watermark) drawWatermark(ctx, look);
+  drawMarks(ctx, look, st);
   ctx.restore();
 }
 
@@ -635,6 +655,7 @@ function slidePlan(st) {
   return slides;
 }
 function renderSlide(ctx, st, look, sl) {
+  look = applyBrand(look, st);
   const tl = buildTimeline(st);
   if (sl.kind === 'cover') return renderFrame(ctx, tl, 2.4, st, look, { noTransitions: true });
   if (sl.kind === 'end') return renderFrame(ctx, tl, tl.duration - 0.05, st, look, { noTransitions: true });
@@ -654,7 +675,7 @@ function renderSlide(ctx, st, look, sl) {
       ctx.restore();
       ctx.save(); pill(ctx, look, 'SWIPE FOR THE ANSWERS', W / 2, y + (it.options ? 470 : 140), { size: 30 }); ctx.restore();
     }
-    if (st.watermark) drawWatermark(ctx, look);
+    drawMarks(ctx, look, st);
     ctx.restore();
     return;
   }
@@ -681,7 +702,7 @@ function renderSlide(ctx, st, look, sl) {
       ctx.restore();
     });
     drawWrapped(ctx, look, 'How many did you get? Comment below!', W / 2, 1440, 860, 1, 40, 26, look.soft, 'text', 800);
-    if (st.watermark) drawWatermark(ctx, look);
+    drawMarks(ctx, look, st);
     ctx.restore();
   }
 }
@@ -804,7 +825,7 @@ async function loadFonts() {
 const state = {
   format: 'country', count: 10, difficulty: 'ramp', region: 'World', mode: 'reveal',
   seconds: 5, reveal: 2, title: '', themeId: 'midnight', lookSeed: newSeed(), seed: newSeed(),
-  sound: true, watermark: true, wyrSplit: {}, wyrText: SAMPLE_WYR, triviaText: SAMPLE_TRIVIA, items: [],
+  sound: true, watermark: true, brand: loadBrand(), wyrSplit: {}, wyrText: SAMPLE_WYR, triviaText: SAMPLE_TRIVIA, items: [],
 };
 let look = makeLook(state.themeId, state.lookSeed);
 let timeline = buildTimeline(state);
@@ -1043,10 +1064,22 @@ function renderPro() {
   const h = document.createElement('h2'); h.textContent = 'Pro';
   if (state.pro) {
     const s = document.createElement('span'); s.className = 'soon'; s.textContent = 'active'; h.appendChild(s); box.appendChild(h);
+    if (state.proClaimed) { const n = document.createElement('p'); n.className = 'fine'; n.textContent = 'Thanks for buying Pro! It is unlocked on this device. Your license key is also in your receipt email for your other devices.'; box.appendChild(n); }
     const lab = document.createElement('label'); lab.className = 'check';
     const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'wm'; cb.checked = state.watermark;
     cb.addEventListener('change', () => { state.watermark = cb.checked; drawPreview(); });
     lab.append(cb, document.createTextNode(' Show the quizvideo.app mark')); box.appendChild(lab);
+    const bk = document.createElement('div'); bk.className = 'brand';
+    const hl = document.createElement('label'); hl.textContent = 'Your handle on every video'; hl.htmlFor = 'brand-handle';
+    const hi = document.createElement('input'); hi.type = 'text'; hi.id = 'brand-handle'; hi.maxLength = 32; hi.placeholder = '@yourhandle'; hi.value = state.brand.handle; hi.autocomplete = 'off';
+    hi.addEventListener('input', () => { state.brand.handle = hi.value.trim(); saveBrand(); drawPreview(); });
+    const cl = document.createElement('label'); cl.className = 'check';
+    const cc = document.createElement('input'); cc.type = 'checkbox'; cc.checked = !!state.brand.color;
+    const cp = document.createElement('input'); cp.type = 'color'; cp.value = state.brand.color || '#FFC21A'; cp.setAttribute('aria-label', 'Brand color');
+    const upd = () => { state.brand.color = cc.checked ? cp.value : ''; saveBrand(); drawPreview(); };
+    cc.addEventListener('change', upd); cp.addEventListener('input', () => { cc.checked = true; upd(); });
+    cl.append(cc, document.createTextNode(' Use my brand color'), cp);
+    bk.append(hl, hi, cl); box.appendChild(bk);
     const p = document.createElement('p'); p.className = 'fine'; p.textContent = 'License ending in ' + (lic ? lic.key.slice(-4) : '????') + '. ';
     const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'mini'; rm.textContent = 'Remove from this device';
     rm.addEventListener('click', () => { writeLicense(null); setPro(false); });
@@ -1054,7 +1087,7 @@ function renderPro() {
     return;
   }
   box.appendChild(h);
-  const p1 = document.createElement('p'); p1.textContent = 'Remove the made with quizvideo.app mark from every video and slide. Batch mode and a brand kit are coming soon, and Pro includes them when they ship.'; box.appendChild(p1);
+  const p1 = document.createElement('p'); p1.textContent = 'Remove the made with quizvideo.app mark, and put your own @handle and brand color on every video and slide. Batch mode is coming soon, and Pro includes it when it ships.'; box.appendChild(p1);
   const p2 = document.createElement('p'); p2.className = 'price'; p2.textContent = '$9 a month, $59 a year, or $49 once (launch deal for the first 100 buyers).'; box.appendChild(p2);
   const a = document.createElement('a'); a.className = 'btn primary'; a.href = CHECKOUT_URL; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Get Pro'; box.appendChild(a);
   const det = document.createElement('details'); det.className = 'lic';
@@ -1074,7 +1107,22 @@ function renderPro() {
   const fine = document.createElement('p'); fine.className = 'fine'; fine.textContent = '14-day refunds, no questions asked. Payments are handled by Polar.'; box.appendChild(fine);
   if (new URLSearchParams(location.search).get('pro') === 'thanks') { det.open = true; st.textContent = 'Thanks for buying Pro! Your license key is in your receipt email. Paste it here to unlock.'; setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400); }
 }
+async function claimFromCheckout(token) {
+  const h = { Authorization: 'Bearer ' + token };
+  const r = await fetch('https://api.polar.sh/v1/customer-portal/license-keys/?limit=20', { headers: h });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const d = await r.json();
+  for (const k of (d.items || []).filter(k => k.status === 'granted')) {
+    let key = k.key;
+    if (!key && k.id) { const r2 = await fetch('https://api.polar.sh/v1/customer-portal/license-keys/' + k.id, { headers: h }); if (r2.ok) key = (await r2.json()).key; }
+    if (key) { const res = await validateLicense(key); if (res.ok) return key; }
+  }
+  return null;
+}
 async function initPro() {
+  if (QV_SESSION && !readLicense()) {
+    try { const key = await claimFromCheckout(QV_SESSION); if (key) { writeLicense({ key, ok: true, at: Date.now() }); state.proClaimed = true; } } catch (e) { /* fall back to pasting the key from the receipt email */ }
+  }
   const lic = readLicense();
   if (lic && lic.ok && Date.now() - (lic.at || 0) < 14 * 864e5) { state.pro = true; state.watermark = false; }
   renderPro();
